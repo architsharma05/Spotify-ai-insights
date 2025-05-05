@@ -29,6 +29,7 @@ app.get("/login", (req, res) => {
       response_type: "code",
       redirect_uri: process.env.REDIRECT_URI,
       scope: scopes,
+      show_dialog: "true"
     });
   
     res.redirect("https://accounts.spotify.com/authorize?" + queryParams.toString());
@@ -55,20 +56,16 @@ app.get("/login", (req, res) => {
         }
       );
   
-      const { access_token, refresh_token, expires_in } = response.data;
+      const { access_token } = response.data;
   
-      res.json({
-        access_token,
-        refresh_token,
-        expires_in,
-      });
+      res.redirect(`http://localhost:5173?access_token=${access_token}`);
   
     } catch (err) {
       console.error("Error exchanging code for token:", err.response?.data || err.message);
       res.status(500).json({ error: "Token exchange failed" });
     }
   });
-
+// Step 3: Fetch user profile
   app.get("/me", async (req, res) => {
     const access_token = req.headers.authorization?.split(" ")[1];
   
@@ -89,6 +86,82 @@ app.get("/login", (req, res) => {
       res.status(500).json({ error: "Failed to fetch user profile" });
     }
   });
+
+// Step 4: Fetch user playlists
+  app.get("/playlists", async (req, res) => {
+    const access_token = req.headers.authorization?.split(" ")[1];
+  
+    if (!access_token) {
+      return res.status(401).json({ error: "Missing access token" });
+    }
+  
+    try {
+      const response = await axios.get("https://api.spotify.com/v1/me/playlists", {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      });
+  
+      res.json(response.data);
+    } catch (err) {
+      console.error("Error fetching playlists:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to fetch playlists" });
+    }
+  });
+
+  // Step 5: Fetch tracks from a specific playlist    
+  app.get("/playlists/:id/tracks", async (req, res) => {
+    const access_token = req.headers.authorization?.split(" ")[1];
+    const playlistId = req.params.id;
+  
+    if (!access_token) {
+      return res.status(401).json({ error: "Missing access token" });
+    }
+  
+    try {
+      const response = await axios.get(
+        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+        {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        }
+      );
+  
+      res.json(response.data);
+    } catch (err) {
+      console.error("Error fetching playlist tracks:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to fetch tracks" });
+    }
+  });
+  
+// Step 6: Fetch audio features for a specific track
+  app.get("/audio-features/:id", async (req, res) => {
+    const access_token = req.headers.authorization?.split(" ")[1];
+    const trackId = req.params.id;
+  
+    if (!access_token) {
+      return res.status(401).json({ error: "Missing access token" });
+    }
+  
+    try {
+      const response = await axios.get(
+        `https://api.spotify.com/v1/audio-features/${trackId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        }
+      );
+      console.log("🎧 AUDIO FEATURES RESPONSE:", response.data); // <== log it
+  
+      res.json(response.data);
+    } catch (err) {
+      console.error("Error fetching audio features:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to fetch audio features" });
+    }
+  });
+  
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://127.0.0.1:${PORT}`);
