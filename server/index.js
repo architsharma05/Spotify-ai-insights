@@ -19,9 +19,13 @@ app.get("/login", (req, res) => {
     const scopes = [
       "user-read-private",
       "user-read-email",
-      "user-top-read",
       "playlist-read-private",
-      "user-read-playback-state"
+      "playlist-read-collaborative",
+      "user-library-read",
+      "user-top-read",
+      "user-read-recently-played",
+      "user-read-playback-state",
+      "streaming"
     ].join(" ");
   
     const queryParams = new URLSearchParams({
@@ -154,6 +158,7 @@ app.get("/login", (req, res) => {
         }
       );
       console.log("🎧 AUDIO FEATURES RESPONSE:", response.data); // <== log it
+      console.log("ACCESS TOKEN USED:", access_token);
   
       res.json(response.data);
     } catch (err) {

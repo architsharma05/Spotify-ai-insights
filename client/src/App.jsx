@@ -60,6 +60,7 @@ function App() {
 
   // Fetch audio features for a given track
   const fetchAudioFeatures = (trackId) => {
+    console.log("🎯 FETCH AUDIO FEATURES for:", trackId);
     const token = localStorage.getItem("access_token");
     fetch(`http://127.0.0.1:4000/audio-features/${trackId}`, {
       headers: {
@@ -67,7 +68,8 @@ function App() {
       },
     })
       .then((res) => res.json())
-      .then((data) => setAudioFeatures(data))
+      .then((data) => {console.log("🎧 AUDIO DATA RETURNED TO FRONTEND:", data);
+                      setAudioFeatures(data)})
       .catch((err) => console.error("Audio features error:", err));
   };
 
