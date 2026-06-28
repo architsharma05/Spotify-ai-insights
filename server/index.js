@@ -23,6 +23,25 @@ export const config = {
   cookieSecure: process.env.COOKIE_SECURE === "true",
 };
 
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config();
+}
+
+const DEFAULT_CLIENT_URL = "http://localhost:5173";
+const DEFAULT_PORT = 4000;
+const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
+const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
+const TOKEN_EXPIRY_BUFFER_MS = 60_000;
+
+export const config = {
+  port: Number(process.env.PORT) || DEFAULT_PORT,
+  clientUrl: process.env.CLIENT_URL || DEFAULT_CLIENT_URL,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  redirectUri: process.env.REDIRECT_URI,
+  cookieSecure: process.env.COOKIE_SECURE === "true",
+};
+
 const app = express();
 
 app.use(
@@ -259,16 +278,6 @@ app.get("/audio-features/:id", requireSpotifyToken, async (req, res) => {
     console.error("Error fetching audio features:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to fetch audio features" });
   }
-});
-
-app.post("/insights/track", requireSpotifyToken, (req, res) => {
-  const { track, audioFeatures } = req.body;
-
-  if (!audioFeatures) {
-    return res.status(400).json({ error: "Missing audio features" });
-  }
-
-  return res.json(createTrackInsight({ track, audioFeatures }));
 });
 
 if (process.env.NODE_ENV !== "test") {

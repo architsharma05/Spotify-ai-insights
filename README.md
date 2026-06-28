@@ -9,8 +9,6 @@ A Spotify companion app for exploring playlists, track audio features, mood anal
 - Spotify profile and playlist browsing.
 - Playlist track browsing.
 - Track-level audio feature display.
-- Rule-based track mood summaries from Spotify audio features.
-- Backend-generated AI-style track insights with listening context and production notes.
 - Frontend loading, empty, and error states.
 
 ## Project structure
@@ -97,13 +95,6 @@ Run backend tests:
 cd server
 npm test
 ```
-
-## Phase 2 and 3 improvements completed
-
-- Added reusable mood analysis from audio features.
-- Added readable mood labels, tags, tempo labels, and feature levels in the track view.
-- Added a backend `/insights/track` endpoint that generates structured track insight copy from the selected track and its audio features.
-- Added insight-service unit tests for mood classification and generated insight output.
 
 ## Phase 1 improvements completed
 

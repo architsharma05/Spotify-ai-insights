@@ -25,6 +25,30 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:4000";
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Request failed");
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [playlists, setPlaylists] = useState([]);
@@ -32,7 +56,6 @@ function App() {
   const [selectedPlaylistName, setSelectedPlaylistName] = useState(null);
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [audioFeatures, setAudioFeatures] = useState(null);
-  const [trackInsight, setTrackInsight] = useState(null);
   const [loadingMessage, setLoadingMessage] = useState("Checking Spotify session...");
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -78,40 +101,27 @@ function App() {
       setSelectedPlaylistName(null);
       setSelectedTrack(null);
       setAudioFeatures(null);
-      setTrackInsight(null);
       setErrorMessage(null);
     }
   };
 
-  const fetchAudioFeatures = (trackId, track) => {
+  const fetchAudioFeatures = (trackId) => {
     setLoadingMessage("Loading audio features...");
     setAudioFeatures(null);
-    setTrackInsight(null);
 
     apiFetch(`/audio-features/${trackId}`)
-      .then(async (data) => {
+      .then((data) => {
         setAudioFeatures(data);
-        const insight = await apiFetch("/insights/track", {
-          method: "POST",
-          body: JSON.stringify({
-            track,
-            audioFeatures: data,
-          }),
-        });
-        setTrackInsight(insight);
         setErrorMessage(null);
       })
       .catch((err) => setErrorMessage(err.message))
       .finally(() => setLoadingMessage(null));
   };
 
-  const moodAnalysis = audioFeatures ? getMoodAnalysis(audioFeatures) : null;
-
   const fetchTracks = (id, name) => {
     setLoadingMessage(`Loading tracks from ${name}...`);
     setSelectedTrack(null);
     setAudioFeatures(null);
-    setTrackInsight(null);
 
     apiFetch(`/playlists/${id}/tracks`)
       .then((data) => {
@@ -196,7 +206,7 @@ function App() {
                     key={track.id}
                     onClick={() => {
                       setSelectedTrack(track);
-                      fetchAudioFeatures(track.id, track);
+                      fetchAudioFeatures(track.id);
                     }}
                     className="cursor-pointer bg-white/10 p-4 rounded-lg hover:bg-white/20 transition flex items-center space-x-4"
                   >
@@ -228,45 +238,13 @@ function App() {
                     />
                   )}
 
-                  {moodAnalysis && (
-                    <div className="mb-6 rounded-lg bg-green-500/10 border border-green-500/30 p-4 text-left">
-                      <h4 className="text-lg font-semibold mb-2">Mood Summary</h4>
-                      <p className="text-green-200 font-semibold">{moodAnalysis.mood}</p>
-                      <p className="text-sm text-gray-200 mt-1">{moodAnalysis.description}</p>
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {moodAnalysis.tags.map((tag) => (
-                          <span key={tag} className="text-xs bg-green-500/20 text-green-100 px-2 py-1 rounded-full">
-                            {tag}
-                          </span>
-                        ))}
-                        <span className="text-xs bg-white/10 text-gray-100 px-2 py-1 rounded-full">
-                          {moodAnalysis.tempoLabel}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {trackInsight && (
-                    <div className="mb-6 rounded-lg bg-purple-500/10 border border-purple-500/30 p-4 text-left">
-                      <h4 className="text-lg font-semibold mb-2">AI Insight</h4>
-                      <p className="text-purple-200 font-semibold">{trackInsight.title}</p>
-                      <p className="text-sm text-gray-200 mt-1">{trackInsight.summary}</p>
-                      <p className="text-sm text-gray-300 mt-3">{trackInsight.listeningContext}</p>
-                      <ul className="list-disc list-inside text-sm text-gray-300 mt-3 space-y-1">
-                        {trackInsight.productionNotes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
                   <h4 className="text-lg font-semibold mb-2">Audio Features</h4>
                   <ul className="space-y-1 text-sm text-gray-200">
-                    <li>🎶 Danceability: {audioFeatures.danceability ?? "N/A"} ({moodAnalysis?.levels.danceability})</li>
-                    <li>⚡ Energy: {audioFeatures.energy ?? "N/A"} ({moodAnalysis?.levels.energy})</li>
-                    <li>😊 Valence: {audioFeatures.valence ?? "N/A"} ({moodAnalysis?.levels.valence})</li>
-                    <li>🎚️ Acousticness: {audioFeatures.acousticness ?? "N/A"} ({moodAnalysis?.levels.acousticness})</li>
-                    <li>🔥 Liveness: {audioFeatures.liveness ?? "N/A"} ({moodAnalysis?.levels.liveness})</li>
+                    <li>🎶 Danceability: {audioFeatures.danceability ?? "N/A"}</li>
+                    <li>⚡ Energy: {audioFeatures.energy ?? "N/A"}</li>
+                    <li>😊 Valence: {audioFeatures.valence ?? "N/A"}</li>
+                    <li>🎚️ Acousticness: {audioFeatures.acousticness ?? "N/A"}</li>
+                    <li>🔥 Liveness: {audioFeatures.liveness ?? "N/A"}</li>
                     <li>
                       🎵 Tempo: {audioFeatures.tempo ? audioFeatures.tempo.toFixed(1) : "N/A"} BPM
                     </li>
@@ -276,7 +254,6 @@ function App() {
                     onClick={() => {
                       setSelectedTrack(null);
                       setAudioFeatures(null);
-                      setTrackInsight(null);
                     }}
                     className="mt-4 px-4 py-2 bg-red-500 rounded"
                   >
