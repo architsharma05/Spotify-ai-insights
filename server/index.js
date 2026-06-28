@@ -2,6 +2,26 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
+import { createTrackInsight } from "./services/insightService.js";
+
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config();
+}
+
+const DEFAULT_CLIENT_URL = "http://localhost:5173";
+const DEFAULT_PORT = 4000;
+const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
+const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
+const TOKEN_EXPIRY_BUFFER_MS = 60_000;
+
+export const config = {
+  port: Number(process.env.PORT) || DEFAULT_PORT,
+  clientUrl: process.env.CLIENT_URL || DEFAULT_CLIENT_URL,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  redirectUri: process.env.REDIRECT_URI,
+  cookieSecure: process.env.COOKIE_SECURE === "true",
+};
 
 if (process.env.NODE_ENV !== "test") {
   dotenv.config();
