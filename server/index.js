@@ -3,8 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
-import { createPlaylistInsight, createTrackInsight } from "./services/insightService.js";
-import { createAiTrackInsight } from "./services/aiInsightService.js";
+import { createTrackInsight } from "./services/insightService.js";
 
 if (process.env.NODE_ENV !== "test") {
   dotenv.config();
@@ -15,8 +14,6 @@ const DEFAULT_PORT = 4000;
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
 const TOKEN_EXPIRY_BUFFER_MS = 60_000;
-const SESSION_COOKIE_NAME = "spotify_session_id";
-const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const config = {
   port: Number(process.env.PORT) || DEFAULT_PORT,
@@ -25,11 +22,26 @@ export const config = {
   clientSecret: process.env.CLIENT_SECRET,
   redirectUri: process.env.REDIRECT_URI,
   cookieSecure: process.env.COOKIE_SECURE === "true",
-  aiInsightsEnabled: process.env.AI_INSIGHTS_ENABLED === "true",
-  openAiModel: process.env.OPENAI_MODEL || "gpt-5.5",
 };
 
-export const sessionStore = new Map();
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config();
+}
+
+const DEFAULT_CLIENT_URL = "http://localhost:5173";
+const DEFAULT_PORT = 4000;
+const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
+const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
+const TOKEN_EXPIRY_BUFFER_MS = 60_000;
+
+export const config = {
+  port: Number(process.env.PORT) || DEFAULT_PORT,
+  clientUrl: process.env.CLIENT_URL || DEFAULT_CLIENT_URL,
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  redirectUri: process.env.REDIRECT_URI,
+  cookieSecure: process.env.COOKIE_SECURE === "true",
+};
 
 const app = express();
 
@@ -61,7 +73,11 @@ export function parseCookies(cookieHeader = "") {
     }, {});
 }
 
-function getCookieOptions(maxAge = SESSION_MAX_AGE_MS) {
+function getAuthCookies(req) {
+  return parseCookies(req.headers.cookie);
+}
+
+function getCookieOptions(maxAge) {
   return {
     httpOnly: true,
     secure: config.cookieSecure,
@@ -70,36 +86,24 @@ function getCookieOptions(maxAge = SESSION_MAX_AGE_MS) {
   };
 }
 
-export function createSession(tokenData) {
-  const sessionId = crypto.randomUUID();
+function setAuthCookies(res, tokenData) {
   const expiresInMs = tokenData.expires_in * 1000;
+  const expiresAt = Date.now() + expiresInMs;
 
-  sessionStore.set(sessionId, {
-    accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token,
-    expiresAt: Date.now() + expiresInMs,
-    createdAt: Date.now(),
-  });
+  res.cookie("spotify_access_token", tokenData.access_token, getCookieOptions(expiresInMs));
+  res.cookie("spotify_token_expires_at", String(expiresAt), getCookieOptions(expiresInMs));
 
-  return sessionId;
-}
-
-function setSessionCookie(res, sessionId) {
-  res.cookie(SESSION_COOKIE_NAME, sessionId, getCookieOptions());
-}
-
-function getSessionId(req) {
-  return parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME];
-}
-
-function clearAuthSession(req, res) {
-  const sessionId = getSessionId(req);
-
-  if (sessionId) {
-    sessionStore.delete(sessionId);
+  if (tokenData.refresh_token) {
+    res.cookie("spotify_refresh_token", tokenData.refresh_token, getCookieOptions(30 * 24 * 60 * 60 * 1000));
   }
+}
 
-  res.clearCookie(SESSION_COOKIE_NAME, getCookieOptions(0));
+function clearAuthCookies(res) {
+  const options = getCookieOptions(0);
+
+  res.clearCookie("spotify_access_token", options);
+  res.clearCookie("spotify_refresh_token", options);
+  res.clearCookie("spotify_token_expires_at", options);
 }
 
 async function refreshAccessToken(refreshToken) {
@@ -121,33 +125,25 @@ async function refreshAccessToken(refreshToken) {
   return response.data;
 }
 
-async function getValidAccessToken(req) {
-  const sessionId = getSessionId(req);
-  const session = sessionStore.get(sessionId);
+async function getValidAccessToken(req, res) {
+  const cookies = getAuthCookies(req);
+  const accessToken = cookies.spotify_access_token;
+  const refreshToken = cookies.spotify_refresh_token;
+  const expiresAt = Number(cookies.spotify_token_expires_at);
+  const isExpired = !expiresAt || Date.now() > expiresAt - TOKEN_EXPIRY_BUFFER_MS;
 
-  if (!session) {
+  if (accessToken && !isExpired) {
+    return accessToken;
+  }
+
+  if (!refreshToken) {
     return null;
   }
 
-  const isExpired = Date.now() > session.expiresAt - TOKEN_EXPIRY_BUFFER_MS;
-
-  if (!isExpired) {
-    return session.accessToken;
-  }
-
-  if (!session.refreshToken) {
-    sessionStore.delete(sessionId);
-    return null;
-  }
-
-  const refreshedTokenData = await refreshAccessToken(session.refreshToken);
-  const expiresInMs = refreshedTokenData.expires_in * 1000;
-
-  sessionStore.set(sessionId, {
-    ...session,
-    accessToken: refreshedTokenData.access_token,
-    refreshToken: refreshedTokenData.refresh_token || session.refreshToken,
-    expiresAt: Date.now() + expiresInMs,
+  const refreshedTokenData = await refreshAccessToken(refreshToken);
+  setAuthCookies(res, {
+    ...refreshedTokenData,
+    refresh_token: refreshedTokenData.refresh_token || refreshToken,
   });
 
   return refreshedTokenData.access_token;
@@ -155,7 +151,7 @@ async function getValidAccessToken(req) {
 
 async function requireSpotifyToken(req, res, next) {
   try {
-    const accessToken = await getValidAccessToken(req);
+    const accessToken = await getValidAccessToken(req, res);
 
     if (!accessToken) {
       return res.status(401).json({ error: "Missing or expired Spotify session" });
@@ -165,7 +161,7 @@ async function requireSpotifyToken(req, res, next) {
     return next();
   } catch (err) {
     console.error("Error refreshing Spotify token:", err.response?.data || err.message);
-    clearAuthSession(req, res);
+    clearAuthCookies(res);
     return res.status(401).json({ error: "Spotify session expired" });
   }
 }
@@ -232,8 +228,7 @@ app.get("/callback", async (req, res) => {
       }
     );
 
-    const sessionId = createSession(response.data);
-    setSessionCookie(res, sessionId);
+    setAuthCookies(res, response.data);
     res.redirect(config.clientUrl);
   } catch (err) {
     console.error("Error exchanging code for token:", err.response?.data || err.message);
@@ -242,7 +237,7 @@ app.get("/callback", async (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-  clearAuthSession(req, res);
+  clearAuthCookies(res);
   res.status(204).send();
 });
 
@@ -285,65 +280,6 @@ app.get("/audio-features/:id", requireSpotifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch audio features" });
   }
 });
-
-app.post("/insights/track", requireSpotifyToken, async (req, res) => {
-  const { track, audioFeatures } = req.body;
-
-  if (!audioFeatures) {
-    return res.status(400).json({ error: "Missing audio features" });
-  }
-
-  const fallbackInsight = createTrackInsight({ track, audioFeatures });
-  const insight = await createAiTrackInsight({ track, audioFeatures, fallbackInsight });
-
-  return res.json(insight);
-});
-
-app.get("/playlists/:id/analysis", requireSpotifyToken, async (req, res) => {
-  try {
-    const playlistTracks = await spotifyGet(`/playlists/${req.params.id}/tracks`, req.spotifyAccessToken);
-    const tracks = (playlistTracks.items || [])
-      .map((item) => normalizePlaylistTrack(item))
-      .filter(Boolean)
-      .slice(0, 25);
-
-    const tracksWithFeatures = await Promise.all(
-      tracks.map(async (track) => {
-        try {
-          const audioFeatures = await spotifyGet(`/audio-features/${track.id}`, req.spotifyAccessToken);
-          return { ...track, audioFeatures };
-        } catch (err) {
-          console.error(`Error fetching audio features for ${track.id}:`, err.response?.data || err.message);
-          return track;
-        }
-      })
-    );
-
-    res.json(createPlaylistInsight({
-      playlistName: req.query.name || "Selected playlist",
-      tracks: tracksWithFeatures,
-    }));
-  } catch (err) {
-    console.error("Error generating playlist analysis:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to analyze playlist" });
-  }
-});
-
-function normalizePlaylistTrack(item) {
-  const track = item.track;
-
-  if (!track?.id) {
-    return null;
-  }
-
-  return {
-    id: track.id,
-    name: track.name,
-    artist: track.artists?.[0]?.name || "Unknown artist",
-    album: track.album?.name || "Unknown album",
-    image: track.album?.images?.[0]?.url,
-  };
-}
 
 if (process.env.NODE_ENV !== "test") {
   app.listen(config.port, () => {

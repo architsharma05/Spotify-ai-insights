@@ -62,27 +62,21 @@ export function analyzeAudioFeatures(features = {}) {
   if (liveness !== null && liveness >= 0.7) tags.push("live-sounding");
 
   let mood = "Balanced";
-  let description = "This track has a balanced feature profile without one dominant mood signal.";
 
   if (energy !== null && valence !== null) {
     if (energy >= 0.7 && valence >= 0.65) {
       mood = "Upbeat and energizing";
-      description = "High energy and positive valence make this feel lively, bright, and momentum-building.";
     } else if (energy >= 0.7 && valence < 0.45) {
       mood = "Intense and dramatic";
-      description = "High energy with lower valence points toward a more aggressive, tense, or dramatic feel.";
     } else if (energy < 0.45 && valence >= 0.6) {
       mood = "Warm and relaxed";
-      description = "Lower energy with positive valence makes this feel easygoing, warm, and comfortable.";
     } else if (energy < 0.45 && valence < 0.45) {
       mood = "Reflective and mellow";
-      description = "Lower energy and lower valence suggest a softer, more introspective mood.";
     }
   }
 
   return {
     mood,
-    description,
     tags: tags.length ? tags : ["balanced"],
     tempo: tempoLevel(tempo),
     levels: Object.fromEntries(
@@ -103,83 +97,7 @@ export function createTrackInsight({ track = {}, audioFeatures = {} }) {
     listeningContext: getListeningContext(analysis),
     productionNotes: getProductionNotes(audioFeatures, analysis),
     analysis,
-    source: "fallback",
   };
-}
-
-export function createPlaylistInsight({ playlistName = "this playlist", tracks = [] }) {
-  const analyzedTracks = tracks
-    .filter((track) => track.audioFeatures)
-    .map((track) => ({
-      ...track,
-      analysis: analyzeAudioFeatures(track.audioFeatures),
-    }));
-
-  const averages = getFeatureAverages(analyzedTracks.map((track) => track.audioFeatures));
-  const overall = analyzeAudioFeatures(averages);
-  const standouts = getPlaylistStandouts(analyzedTracks);
-
-  return {
-    title: `${playlistName} feels ${overall.mood.toLowerCase()}`,
-    summary: buildPlaylistSummary(playlistName, analyzedTracks.length, overall, averages),
-    listeningContext: getListeningContext(overall),
-    averages,
-    standouts,
-    analysis: overall,
-  };
-}
-
-function getFeatureAverages(featureSets) {
-  const keys = ["danceability", "energy", "valence", "acousticness", "liveness", "tempo"];
-
-  return Object.fromEntries(
-    keys.map((key) => {
-      const values = featureSets.map((features) => readFeature(features, key)).filter((value) => value !== null);
-      const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-
-      return [key, average];
-    })
-  );
-}
-
-function getPlaylistStandouts(tracks) {
-  return {
-    highestEnergy: pickHighestTrack(tracks, "energy"),
-    mostDanceable: pickHighestTrack(tracks, "danceability"),
-    mostPositive: pickHighestTrack(tracks, "valence"),
-    mostAcoustic: pickHighestTrack(tracks, "acousticness"),
-  };
-}
-
-function pickHighestTrack(tracks, feature) {
-  return tracks.reduce((best, track) => {
-    const value = readFeature(track.audioFeatures, feature);
-
-    if (value === null) {
-      return best;
-    }
-
-    if (!best || value > best.value) {
-      return {
-        id: track.id,
-        name: track.name,
-        artist: track.artist,
-        value,
-      };
-    }
-
-    return best;
-  }, null);
-}
-
-function buildPlaylistSummary(playlistName, trackCount, overall, averages) {
-  if (!trackCount) {
-    return `${playlistName} does not have enough audio-feature data to generate a playlist summary yet.`;
-  }
-
-  const tempoCopy = averages.tempo ? `around ${averages.tempo.toFixed(1)} BPM on average` : "an unknown average tempo";
-
-  return `${playlistName} has ${trackCount} analyzed tracks and reads as ${overall.mood.toLowerCase()}, with a ${overall.tempo} center of gravity and ${tempoCopy}.`;
 }
 
 function getListeningContext(analysis) {
