@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import axios from "axios";
 import { createTrackInsight } from "./services/insightService.js";
 
