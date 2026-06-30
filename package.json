@@ -1,0 +1,14 @@
+{
+  "name": "spotify-ai-insights",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Run scripts for the Spotify AI Insights client and server",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "test": "npm --prefix server test",
+    "lint": "npm --prefix client run lint",
+    "build": "npm --prefix client run build"
+  }
+}
