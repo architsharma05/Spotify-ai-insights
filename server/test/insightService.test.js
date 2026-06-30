@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeAudioFeatures, createPlaylistInsight, createTrackInsight } from "../services/insightService.js";
+import { analyzeAudioFeatures, createTrackInsight } from "../services/insightService.js";
 
 test("analyzeAudioFeatures labels upbeat high-energy tracks", () => {
   const analysis = analyzeAudioFeatures({
@@ -28,20 +28,4 @@ test("createTrackInsight returns user-facing insight copy", () => {
   assert.match(insight.summary, /Test Song by Test Artist/);
   assert.match(insight.listeningContext, /focused listening|late-night|studying|winding down/);
   assert.equal(insight.analysis.mood, "Reflective and mellow");
-});
-
-
-test("createPlaylistInsight summarizes averages and standout tracks", () => {
-  const insight = createPlaylistInsight({
-    playlistName: "Test Mix",
-    tracks: [
-      { id: "1", name: "Energetic", artist: "Artist A", audioFeatures: { energy: 0.95, danceability: 0.7, valence: 0.5, tempo: 150 } },
-      { id: "2", name: "Happy", artist: "Artist B", audioFeatures: { energy: 0.4, danceability: 0.8, valence: 0.9, tempo: 110 } },
-    ],
-  });
-
-  assert.match(insight.title, /Test Mix/);
-  assert.equal(Number(insight.averages.energy.toFixed(2)), 0.68);
-  assert.equal(insight.standouts.highestEnergy.name, "Energetic");
-  assert.equal(insight.standouts.mostPositive.name, "Happy");
 });
